@@ -1,25 +1,307 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+#Data Science Specialism
 
+###Module 5 - Reproducible research (May 2015)
 
-## Loading and preprocessing the data
+###DATA ANALYST: Fiona
 
+###Date: 2015 May 13
 
+##Project One - Investigating the number of steps taken as recorded by a personal activity monitoring device during October and November 2012.
 
-## What is mean total number of steps taken per day?
+###How the data was collected?
 
-
-
-## What is the average daily activity pattern?
+The device collected data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November 2012 and include the number of steps taken in 5 minute intervals for every day of the two months.
 
 
 
-## Imputing missing values
+###R SCRIPT
 
+```{r preprocessing}
+##1 - Preprocessing of the raw data into analytical data - three steps
 
+	##1.1 - loading libraries
+	library(data.table)
+	library(dplyr)
+	library(reshape2)
+	library(ggplot2)
+	library(knitr)
+	library(rmarkdown)
 
-## Are there differences in activity patterns between weekdays and weekends?
+	##NOTE - for knitr/rmarkdown to work in RCONSOLE you are required to download the PANDOC package available online at: http://pandoc.org/installing.html
+
+		##1.2 - loading the dataset
+		dataset <- read.table("activity.csv", header = TRUE, sep = ",")
+
+			##1.3 - converting the date in the date readable format yyyy-mm-dd
+			dataset$date <- strptime(dataset$date, format = "%Y-%m-%d")
+
+				##1.4 changing interval from int to numeric then to four characters
+				dataset$interval <- as.numeric(dataset$interval)
+				dataset$interval <- sprintf("%04d", dataset$interval)	
+```
+
+##QUESTION 1 - What is mean total number of steps taken per day?
+
+	ADDITIONAL INSTRUCTIONS - "for this part of the assignment, you can IGNORE the missing values in the dataset".
+
+```{r additional processing}
+	##1 - additional data processing - removing the NA values
+		
+		##1.1 - removing na values
+		nasubset <- na.omit(dataset)
+
+			##1.2 - removing interval column
+			nasubset <- nasubset[c(1:2)]
+				
+				##1.3 - calculating total number of steps taken every day by melting/dcast (reshape2 package)
+				meltedsubset <- melt(nasubset, id.vars = "date")
+				totalsteps <- dcast(meltedsubset, date ~ variable, sum)
+```		
+
+###PART 1 (Q1) - Plot a histogram - total number of steps taken each day.
+
+```{r plotting histogram}
+	##1 - plotting the histogram
+	with (totalsteps, {
+	plot(date, steps, main = "Total number of steps taken each day with NA values present", type = "h", xlab = "Date", ylab = "Number of steps", lwd = 5)
+	})
+```
+
+###PART 2 (Q1) - Calculate and report the mean and median of the total number of steps taken per day.
+
+```{r mean and median values}
+	##1 - mean value calculation
+	mean(totalsteps$steps)
+	
+		##2 - median value calculation
+		median(totalsteps$steps)
+```
+
+###QUESTION 2 -	What is the average daily activity pattern?
+
+```{r additional data processing}
+	##2 - additional processing of dataset
+	
+		##2.1 - starting new dataset for the analysis
+		patterndataset <- dataset
+	
+			##2.2 - removing na values
+			napattern <- na.omit(patterndataset)
+			
+				##2.3 - removing the date column
+				napattern <- napattern[c(3, 1)]
+				
+					##2.4 - calculating the mean total number of steps per interval
+					meltedpattern <- melt(napattern, id.vars = "interval")
+					totalinterval <- dcast(meltedpattern, interval ~ variable, mean)
+```
+
+###PART 1 (Q2) - Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+
+```{r linegraph}
+	##2.1 - plotting the graph
+	with (totalinterval, {
+	plot(interval, steps, main = "Mean number of steps taken in each 5 minute interval \n", type = "l", xlab = "Time (hhmm)", ylab = "Mean number of steps")
+	})
+```
+
+###PART 2 (Q2) - Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+```{r interval discovery}
+
+	##2.2.1 - finding the maximum number of steps
+	interval <- sort(totalinterval$steps, decreasing = TRUE)
+
+		##2.2.2 - locating the row number for "interval"
+		rownumber <- match(interval, totalinterval$steps)
+
+			##2.2.3 - output - the 5-minute interval
+			head(totalinterval[rownumber,],1)
+```
+
+###QUESTION 3 - Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with N.A.s)
+
+```{r removing missing data}
+	##additional data processing
+	
+	##3.1 - starting with a fresh dataset for the analysis
+	valuesna <- read.table("activity.csv", header = TRUE, sep = ",")
+
+		##3.2 changing interval from int to numeric then to four characters
+		valuesna$interval <- as.numeric(valuesna$interval)
+		valuesna$interval <- sprintf("%04d", valuesna$interval)	
+```
+
+Number of rows with missing values (as NA)?	
+	
+```{r missing}
+	##3.3 - calculating the number of rows with NA values
+	countnasubset <- sum(complete.cases(valuesna))
+	countnasubset
+```
+
+###PART 1 (Q3) - Devise a STRATEGY for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+
+###MY STRATEGY: For this part of the data processing I am replacing the NA values in each interval period with the mean value for that particular interval, and those values are shown below.  Then I created code to build a new column called "steps" and fill it will the exact step values or replacements for the NA values.
+
+```{r replacement NA values}
+	##3.1.1 - starting with a fresh dataset for the calculated mean totals for each interval period. And the values are:
+	intervalreplacements <- totalinterval
+	intervalreplacements
+```
+	
+###PART 2 (Q3) - Create a new dataset that is equal to the original dataset but with the missing data filled in.
+
+```{r part 2}
+	##calculating a new column with number of steps - actual values or replacement values for NAs
+
+	##3.2.1 - merging the two dataset by interval values
+	mergena <- merge(valuesna, intervalreplacements, by = "interval")
+		
+			##3.2.2 - creating the new column
+			mergena$steps <- 0
+	
+				##3.2.3 - the calculation
+				rownumber = seq(1, 17568)
+				for (i in rownumber) {	
+					if (is.na(mergena$steps.x[i])) {
+						mergena$steps[i] <- mergena$steps.y[i]
+							} else {
+								mergena$steps[i] <- mergena$steps.x[i]
+					}
+				}
+	
+					##3.2.4 - removing the unwanted columns so this dataset matches the original dataset
+					finalsubset <- mergena[c(5,3,1)]	
+
+	##3.2.5 - displaying the first and last rows from original (dataset) and non NA (finalsubset) showing that the NAs have been removed
+	head(dataset, 1)
+	head(finalsubset, 1)
+	tail(dataset, 1)
+	tail(finalsubset, 1)
+```
+
+###PART 3 (Q3) - Make a histogram of the total number of steps taken each day.  Calculate and report the mean and median total number of steps taken per day.  Do these values differ from the estimates from the first part of the assignment?  What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+```{r part 3}
+	##additional processing of dataset
+	
+	##3.3.1 - removing the interval column
+	finalsubset <- finalsubset[c(1:2)]
+
+		##3.3.2 - converting the date in the date readable format yyyy-mm-dd
+		finalsubset$date <- strptime(finalsubset$date, format = "%Y-%m-%d")
+			
+			##3.3.3 - calculating the mean total number of steps per interval
+			meltedpattern <- melt(finalsubset, id.vars = "date")
+			finalna <- dcast(meltedpattern, date ~ variable, sum)
+
+	##3.3.4 - plotting the graph
+	with (finalna, {
+	plot(date, steps, main = "Total number of steps taken each day with NA values replaced", type = "h", xlab = "Date", ylab = "Number of steps", lwd = 5)
+	})
+
+	##calculating mean and median values
+
+	##3.3.5 - mean value calculation
+	mean(finalna$steps)
+	
+		##3.3.6 - median value calculation
+		median(finalna$steps)
+```
+		
+	##how do values differ with NA and without NA values?
+	
+	The median value for the replaced missing values dataset  has increased and shifted to the mean value as shown in the table below.
+
+```{r table}
+	##3.3.7 - creating a mini data table of the mean and median results for comparison
+	comparison <- matrix(1:2, 2,3)
+	meanvalue1 <- mean(totalsteps$steps)
+	medianvalue1 <- median(totalsteps$steps)	
+	meanvalue2 <- mean(finalna$steps)
+	medianvalue2 <- median(finalna$steps)
+	values1 <- cbind("with NA", meanvalue1, medianvalue1)
+	values2 <- cbind("replaced NA", meanvalue2, medianvalue2)
+	comparison <- rbind(values1, values2)
+	colnames(comparison) <- c("analysis?", "mean value", "median value")
+	comparison
+```
+	
+	##What is impact of replacing NA with mean interval value?
+
+	Days where values were unavailable now have values filled with mean value of replacement interval values.  This analysis makes the assumption that the device did not correctly record steps for that particular interval - is this possible?  I suggest that the device did not plot the steps correctly because it was running out of battery power and/or problems with the app collecting/saving the data -  had shut down (accidentally or deliberately) completely rather than suspended until the next movement was detected.  Did this happen? Can we find out?
+
+	Of course we must not confuse NA values with zero values as a zero value suggests that the person was not moving.
+
+```{r both dataset graphs, fig.height = 8}
+	##What is impact of replacing NA with mean interval value?
+	
+	##3.3.8 - plotting the two graphs
+	par(mfrow = c(2,1))
+	with (totalsteps, {
+	plot(date, steps, main = "Total number of steps taken each day with NA values present", type = "h", xlab = "Date", ylab = "Number of steps", lwd = 5)
+	})
+
+		with (finalna, {
+		plot(date, steps, main = "Total number of steps taken each day with NA values replaced", type = "h", xlab = "Date", ylab = "Number of steps", lwd = 5)
+		})
+```
+
+##QUESTION 4 - Are there differences in activity patterns between weekdays and weekends?
+
+	ADDITIONAL INFORMATION - "For this part the weekdays() function may be of some help here. Use the dataset with the filled-in missing values for this part.
+
+	Create a new factor variable in the dataset with two levels – "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+	Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data."
+
+```{r week days, fig.height = 8}
+	##4.1 - starting with a new dataset with the replaced NA values
+	weekends <- mergena[c(3,1,5)]
+	
+	##additional processing of data
+
+		##4.2 - converting the date in the date readable format yyyy-mm-dd
+		weekends$date <- strptime(weekends$date, format = "%Y-%m-%d")
+
+			##4.3 - calculating the weekdays from the date
+			day <- weekdays(weekends$date, abbreviate = TRUE)
+			
+				##4.4 - merging the datasets
+				daydate <- cbind(weekends, day)
+				
+					##4.5 - removing the date column
+					daydate <- daydate[c(2:4)]
+				
+						##4.6 - calculating the sum values for each day and time interval
+						meltweekends <- melt(daydate, id.vars = c("interval", "day"))
+						weekdayorend <- dcast(meltweekends, interval + day ~ variable, sum)
+
+	##determining whether a day is a weekday or weekend
+
+	##4.7 - creating a new column
+	weekdayorend$daytype <- 0
+	
+		##4.8 - the calculation
+		numberrow = seq(1, 2016)
+		for (i in numberrow) {
+			if (weekdayorend$day[i] == "Sat" | weekdayorend$day[i] == "Sun") {
+				weekdayorend$daytype[i] <- "weekend"
+					} else {
+						weekdayorend$daytype[i] <- "weekday"
+			}
+		}
+
+			##4.9 - removing day column
+			weekdayorend <- weekdayorend[c(1, 3, 4)]
+			
+				##4.10 - calculating the sum values for weekend or weekday and time interval
+				melting <- melt(weekdayorend, id.vars = c("interval", "daytype"))
+				weekdayorend <- dcast(melting, interval + daytype ~ variable, sum)
+			
+	##4.11 - plotting the final graph
+	qplot(interval, steps, data = weekdayorend, facets = daytype~., xlab = "Interval (hhmm)", ylab = "Number of steps", main = "Is there a difference \n between weekday and weekend \n activity for each interval period? \n")
+```	
+
+render("PA1_template.Rmd", html_document())
